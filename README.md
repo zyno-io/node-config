@@ -1,4 +1,4 @@
-# @signal24/config
+# @zyno-io/config
 
 TypeScript package for encrypting & decrypting secrets in and loading config from .env files. Leverages asymmetric keys so that any developer with access can add & update secrets, but only those with the private key (typically admins and your infrastructure itself) can decrypt secrets.
 
@@ -15,7 +15,7 @@ A pair of RSA-2048 keys (one public, one private) are generated as your encrypti
 ## Installation
 
 ```
-yarn add @signal24/config
+yarn add @zyno-io/config
 ```
 
 ## Setup
@@ -26,7 +26,7 @@ Generate a key pair:
 npx config-cli generate-keys
 
 # alternatively, use Docker:
-docker run --rm -it ghcr.io/signal24/node-config generate-keys
+docker run --rm -it ghcr.io/zyno-io/node-config generate-keys
 ```
 
 Create a .env file with typical `key=value` pairs, but suffix any secret key with `_SECRET`. For example:
@@ -43,7 +43,7 @@ Encrypt the secrets:
 npx config-cli encrypt .env
 
 # alternatively, use Docker
-docker run --rm -it -v `pwd`:/src -w /src ghcr.io/signal24/node-config encrypt .env
+docker run --rm -it -v `pwd`:/src -w /src ghcr.io/zyno-io/node-config encrypt .env
 ```
 
 Your .env file now contains encrypted values:
@@ -59,7 +59,7 @@ New values can be added or existing values updated, and then simply re-run the e
 ## Decrypt & Load Config using API
 
 ```
-import { loadConfig } from '@signal24/config';
+import { loadConfig } from '@zyno-io/config';
 
 const config = loadConfig();
 
@@ -93,7 +93,7 @@ const config = loadConfig({
 ## Decrypt & Load Config into process.env using API
 
 ```
-import { loadConfigIntoEnv } from '@signal24/config';
+import { loadConfigIntoEnv } from '@zyno-io/config';
 
 loadConfigIntoEnv({
     // same options as above
@@ -103,7 +103,7 @@ loadConfigIntoEnv({
 ## Decrypt & Load Config using Node 'require'
 
 ```
-node -r @signal24/config/load your-app.js
+node -r @zyno-io/config/load your-app.js
 ```
 
 This invocation will load, decrypt, and parse the `.env` and `.env.local` files (in addition to environment-specific files; see below) into `process.env`.
@@ -120,7 +120,7 @@ Using specific files:
 eval $(npx config-cli sh .env .env.local .env.staging)
 
 # alternatively, use Docker
-eval $(docker run --rm -it -v `pwd`:/src -w /src ghcr.io/signal24/node-config sh .env .env.local .env.staging)
+eval $(docker run --rm -it -v `pwd`:/src -w /src ghcr.io/zyno-io/node-config sh .env .env.local .env.staging)
 ```
 
 Or, using an automatic file list based on environment name:
@@ -129,7 +129,7 @@ Or, using an automatic file list based on environment name:
 eval $(npx config-cli shenv staging)
 
 # alternatively, use Docker
-eval $(docker run --rm -it -v `pwd`:/src -w /src ghcr.io/signal24/node-config shenv staging)
+eval $(docker run --rm -it -v `pwd`:/src -w /src ghcr.io/zyno-io/node-config shenv staging)
 ```
 
 Be sure the decryption key is set as `CONFIG_DECRYPTION_KEY` in your environment.
@@ -142,7 +142,7 @@ With `CONFIG_DECRYPTION_KEY` in the environment:
 npx config-cli decrypt .env
 
 # alternatively, use Docker
-docker run --rm -it -v `pwd`:/src -w /src ghcr.io/signal24/node-config decrypt .env
+docker run --rm -it -v `pwd`:/src -w /src ghcr.io/zyno-io/node-config decrypt .env
 ```
 
 Or, specified as a parameter:
@@ -151,7 +151,7 @@ Or, specified as a parameter:
 npx config-cli decrypt -k "LONG_DECRYPTION_KEY" .env
 
 # alternatively, use Docker
-docker run --rm -it -v `pwd`:/src -w /src ghcr.io/signal24/node-config decrypt -k "LONG_DECRYPTION_KEY" .env
+docker run --rm -it -v `pwd`:/src -w /src ghcr.io/zyno-io/node-config decrypt -k "LONG_DECRYPTION_KEY" .env
 ```
 
 ## Verify encrypted secrets on pre-commit

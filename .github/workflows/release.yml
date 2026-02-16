@@ -5,27 +5,29 @@ on:
 
 name: Release
 
+permissions:
+  contents: write
+  id-token: write
+
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
+          registry-url: https://registry.npmjs.org
       - run: corepack enable
       - run: yarn --immutable
       - run: yarn test --collectCoverage=true
       - run: yarn format
       - run: git diff --exit-code
       - run: yarn build
-      - uses: codecov/codecov-action@v3
-      - uses: actions/create-release@v1
+      - uses: codecov/codecov-action@v5
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+      - run: npm publish --provenance --access public
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-      - uses: JS-DevTools/npm-publish@v1
-        with:
-          token: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

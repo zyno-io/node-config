@@ -12,10 +12,10 @@ jobs:
       - uses: actions/checkout@v2
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
       - run: corepack enable
       - run: yarn --immutable
-      - run: yarn test --collectCoverage=true
+      - run: yarn test
       - run: yarn format
       - run: git diff --exit-code
       - run: yarn build

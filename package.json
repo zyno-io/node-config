@@ -1,6 +1,6 @@
 {
-    "name": "@signal24/config",
-    "version": "1.9.2",
+    "name": "@zyno-io/config",
+    "version": "1.10.0",
     "description": "Runtime configuration encryption helpers",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
@@ -18,34 +18,26 @@
     "scripts": {
         "dev": "ts-node src/cli.ts",
         "build": "rm -rf dist && tsc -p tsconfig.json && chmod +x dist/cli.js",
-        "format": "prettier --write . && eslint src --rule 'prettier/prettier: off' --fix",
-        "test": "jest",
+        "format": "npx oxlint --fix --fix-suggestions --fix-dangerously && prettier --write .",
+        "test": "node --import tsx --test 'tests/**/*.spec.ts'",
         "watch": "tsc -w -p tsconfig.json"
     },
     "author": "Sean Ferguson <hello@sgnl24.com>",
     "license": "ISC",
     "dependencies": {
-        "commander": "^14.0.0",
-        "dotenv": "^16.5.0"
+        "commander": "^14.0.3",
+        "dotenv": "^17.3.1"
     },
     "devDependencies": {
-        "@eslint/js": "^9.28.0",
-        "@types/jest": "^29.5.14",
-        "@types/node": "^22.15.29",
-        "buildkite-test-collector": "^1.8.2",
-        "eslint": "^9.28.0",
-        "eslint-config-prettier": "^10.1.5",
-        "eslint-plugin-prettier": "^5.4.1",
-        "eslint-plugin-simple-import-sort": "^12.1.1",
-        "eslint-plugin-unused-imports": "^4.1.4",
-        "jest": "^29.7.0",
-        "prettier": "^3.5.3",
-        "ts-jest": "^29.3.4",
+        "@types/node": "^25.2.3",
+        "lefthook": "^2.1.1",
+        "oxlint": "^1.47.0",
+        "prettier": "^3.8.1",
         "ts-node": "^10.9.2",
         "tslib": "^2.8.1",
-        "type-fest": "^4.41.0",
-        "typescript": "^5.8.3",
-        "typescript-eslint": "^8.33.1"
+        "tsx": "^4.21.0",
+        "type-fest": "^5.4.4",
+        "typescript": "^5.9.3"
     },
     "engines": {
         "node": ">=16.0.0"
