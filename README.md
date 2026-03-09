@@ -112,6 +112,23 @@ The `env` key above will be set to `APP_ENV` environment variable, if set.
 
 Be sure the decryption key is set as `CONFIG_DECRYPTION_KEY` in your environment.
 
+## Execute a command with config loaded
+
+Run a subprocess with environment variables loaded from `.env` files. Use `--` to separate config-cli options from the child command:
+
+```
+npx config-cli exec -e production -- node app.js
+
+# alternatively, use Docker
+docker run --rm -it -v `pwd`:/src -w /src ghcr.io/zyno-io/node-config exec -e production -- node app.js
+```
+
+The environment is resolved from `-e` if provided, otherwise from the `APP_ENV` environment variable. With an environment set, loads `.env`, `.env.local`, `.env.<environment>`, and `.env.<environment>.local`. Without either, loads `.env` and `.env.local`.
+
+The subprocess inherits the current environment. Values from `.env` files are merged in, but existing environment variables take precedence (matching the behavior of `sh`/`shenv`).
+
+Be sure the decryption key is set as `CONFIG_DECRYPTION_KEY` in your environment (or pass `-k`).
+
 ## Decrypt & Load Config into other environments
 
 Using specific files:

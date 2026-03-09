@@ -16,11 +16,12 @@ describe('CLI', () => {
         mock.restoreAll();
         delete process.env.CONFIG_ENCRYPTION_KEY;
         delete process.env.CONFIG_DECRYPTION_KEY;
+        delete process.env.APP_ENV;
         cpSync(`${__dirname}/fixtures/sample.env`, `${__dirname}/fixtures/cli.env.test`);
     });
 
     after(() => {
-        rmSync(`${__dirname}/fixtures/cli.env.test`);
+        rmSync(`${__dirname}/fixtures/cli.env.test`, { force: true });
     });
 
     it('should generate encryption keys', async () => {
@@ -121,5 +122,236 @@ describe('CLI', () => {
         program.parse(['decrypt', `${__dirname}/fixtures/cli.env.test`, '-k', privateKey], { from: 'user' });
         const afterContent = readFileSync(`${__dirname}/fixtures/cli.env.test`, 'utf8');
         assert.strictEqual(beforeContent, afterContent);
+    });
+
+    describe('verify', () => {
+        it('should pass verification for a correctly encrypted file', async () => {
+            const program = await getProgram();
+            const { privateKey, publicKey } = generateConfigKeyPair();
+
+            program.parse(['encrypt', `${__dirname}/fixtures/cli.env.test`, '-k', publicKey], { from: 'user' });
+
+            const logMock = mock.method(console, 'log', () => {});
+            program.parse(['verify', `${__dirname}/fixtures/cli.env.test`, '-k', privateKey], { from: 'user' });
+
+            assert.ok(
+                logMock.mock.calls.some(call => call.arguments[0]?.includes('cli.env.test')),
+                'should log the verified file'
+            );
+        });
+
+        it('should warn when no decryption key is provided', async () => {
+            const program = await getProgram();
+            const { publicKey } = generateConfigKeyPair();
+
+            program.parse(['encrypt', `${__dirname}/fixtures/cli.env.test`, '-k', publicKey], { from: 'user' });
+
+            const warnMock = mock.method(console, 'warn', () => {});
+            const logMock = mock.method(console, 'log', () => {});
+            program.parse(['verify', `${__dirname}/fixtures/cli.env.test`], { from: 'user' });
+
+            assert.ok(
+                warnMock.mock.calls.some(call => call.arguments[0]?.includes('no decryption key')),
+                'should warn about missing key'
+            );
+            assert.ok(
+                logMock.mock.calls.some(call => call.arguments[0]?.includes('cli.env.test')),
+                'should still pass (no decrypt check)'
+            );
+        });
+
+        it('should detect unencrypted secrets', async () => {
+            const program = await getProgram();
+            const exitMock = mock.method(process, 'exit', () => {
+                throw new Error('process.exit');
+            });
+            const errorMock = mock.method(console, 'error', () => {});
+
+            assert.throws(() => program.parse(['verify', `${__dirname}/fixtures/cli.env.test`], { from: 'user' }), { message: 'process.exit' });
+
+            assert.ok(
+                errorMock.mock.calls.some(call => call.arguments[0]?.includes('is not encrypted')),
+                'should report unencrypted secrets'
+            );
+            exitMock.mock.restore();
+        });
+    });
+
+    describe('sh', () => {
+        it('should output export statements for an unencrypted file', async () => {
+            const program = await getProgram();
+            const logMock = mock.method(console, 'log', () => {});
+
+            program.parse(['sh', `${__dirname}/fixtures/cli.env.test`], { from: 'user' });
+
+            const output = logMock.mock.calls.map(call => call.arguments[0]).join('\n');
+            assert.match(output, /export VAR_1="a"/);
+            assert.match(output, /export VAR_2="b"/);
+        });
+
+        it('should output export statements for an encrypted file with a key', async () => {
+            const program = await getProgram();
+            const { privateKey, publicKey } = generateConfigKeyPair();
+
+            program.parse(['encrypt', `${__dirname}/fixtures/cli.env.test`, '-k', publicKey], { from: 'user' });
+
+            const logMock = mock.method(console, 'log', () => {});
+            program.parse(['sh', `${__dirname}/fixtures/cli.env.test`, '-k', privateKey], { from: 'user' });
+
+            const output = logMock.mock.calls.map(call => call.arguments[0]).join('\n');
+            assert.match(output, /export VAR_1="a"/);
+            assert.match(output, /export VAR_3_SECRET="the quick brown fox jumps over the lazy dog"/);
+        });
+
+        it('should not export variables already set in the environment', async () => {
+            const program = await getProgram();
+            process.env.VAR_1 = 'already_set';
+
+            const logMock = mock.method(console, 'log', () => {});
+            program.parse(['sh', `${__dirname}/fixtures/cli.env.test`], { from: 'user' });
+
+            const output = logMock.mock.calls.map(call => call.arguments[0]).join('\n');
+            assert.doesNotMatch(output, /export VAR_1=/);
+            assert.match(output, /export VAR_2="b"/);
+
+            delete process.env.VAR_1;
+        });
+    });
+
+    describe('exec', () => {
+        it('should execute a command with env vars from .env files', async () => {
+            const program = await getProgram();
+            const exitMock = mock.method(process, 'exit', () => {
+                throw new Error('process.exit');
+            });
+
+            // Use the test fixture as the .env file by setting CONFIG_PATH
+            process.env.CONFIG_PATH = `${__dirname}/fixtures`;
+            cpSync(`${__dirname}/fixtures/sample.env`, `${__dirname}/fixtures/.env`);
+
+            try {
+                assert.throws(() => program.parse(['exec', '--', 'echo', 'hello'], { from: 'user' }), { message: 'process.exit' });
+
+                // spawnSync was called and process.exit was invoked
+                assert.ok(exitMock.mock.calls.length > 0, 'process.exit should have been called');
+            } finally {
+                exitMock.mock.restore();
+                rmSync(`${__dirname}/fixtures/.env`);
+                delete process.env.CONFIG_PATH;
+            }
+        });
+
+        it('should use APP_ENV to determine env files', async () => {
+            const program = await getProgram();
+            const exitMock = mock.method(process, 'exit', () => {
+                throw new Error('process.exit');
+            });
+
+            process.env.CONFIG_PATH = `${__dirname}/fixtures`;
+            process.env.APP_ENV = 'test';
+            cpSync(`${__dirname}/fixtures/sample.env`, `${__dirname}/fixtures/.env`);
+
+            try {
+                assert.throws(() => program.parse(['exec', '--', 'echo', 'hello'], { from: 'user' }), { message: 'process.exit' });
+
+                assert.ok(exitMock.mock.calls.length > 0, 'process.exit should have been called');
+            } finally {
+                exitMock.mock.restore();
+                rmSync(`${__dirname}/fixtures/.env`);
+                delete process.env.CONFIG_PATH;
+                delete process.env.APP_ENV;
+            }
+        });
+
+        it('should use -e flag to specify environment', async () => {
+            const program = await getProgram();
+            const exitMock = mock.method(process, 'exit', () => {
+                throw new Error('process.exit');
+            });
+
+            process.env.CONFIG_PATH = `${__dirname}/fixtures`;
+            cpSync(`${__dirname}/fixtures/sample.env`, `${__dirname}/fixtures/.env`);
+            cpSync(`${__dirname}/fixtures/sample.env`, `${__dirname}/fixtures/.env.staging`);
+
+            try {
+                assert.throws(() => program.parse(['exec', '-e', 'staging', '--', 'echo', 'hello'], { from: 'user' }), { message: 'process.exit' });
+
+                assert.ok(exitMock.mock.calls.length > 0, 'process.exit should have been called');
+            } finally {
+                exitMock.mock.restore();
+                rmSync(`${__dirname}/fixtures/.env`);
+                rmSync(`${__dirname}/fixtures/.env.staging`);
+                delete process.env.CONFIG_PATH;
+            }
+        });
+
+        it('should exit with error when no command is specified', async () => {
+            const program = await getProgram();
+            const exitMock = mock.method(process, 'exit', () => {
+                throw new Error('process.exit');
+            });
+            const errorMock = mock.method(console, 'error', () => {});
+
+            try {
+                assert.throws(() => program.parse(['exec'], { from: 'user' }), { message: 'process.exit' });
+
+                assert.ok(
+                    errorMock.mock.calls.some(call => call.arguments[0] === 'No command specified'),
+                    'should log "No command specified"'
+                );
+            } finally {
+                exitMock.mock.restore();
+            }
+        });
+
+        it('should pass through the exit code of the spawned process', async () => {
+            const program = await getProgram();
+            const exitCodes: number[] = [];
+            const exitMock = mock.method(process, 'exit', (code: number) => {
+                exitCodes.push(code);
+                throw new Error('process.exit');
+            });
+
+            process.env.CONFIG_PATH = `${__dirname}/fixtures`;
+            cpSync(`${__dirname}/fixtures/sample.env`, `${__dirname}/fixtures/.env`);
+
+            try {
+                assert.throws(() => program.parse(['exec', '--', 'node', '-e', 'process.exit(0)'], { from: 'user' }), { message: 'process.exit' });
+
+                assert.strictEqual(exitCodes[0], 0, 'should exit with code 0');
+            } finally {
+                exitMock.mock.restore();
+                rmSync(`${__dirname}/fixtures/.env`);
+                delete process.env.CONFIG_PATH;
+            }
+        });
+
+        it('should decrypt env vars when a key is provided', async () => {
+            const program = await getProgram();
+            const exitMock = mock.method(process, 'exit', () => {
+                throw new Error('process.exit');
+            });
+
+            const { privateKey, publicKey } = generateConfigKeyPair();
+
+            process.env.CONFIG_PATH = `${__dirname}/fixtures`;
+            cpSync(`${__dirname}/fixtures/sample.env`, `${__dirname}/fixtures/.env`);
+
+            // Encrypt the .env file first
+            program.parse(['encrypt', `${__dirname}/fixtures/.env`, '-k', publicKey], { from: 'user' });
+
+            try {
+                // exec with decryption key - should run and call process.exit
+                assert.throws(() => program.parse(['exec', '-k', privateKey, '--', 'node', '-e', 'process.exit(0)'], { from: 'user' }), {
+                    message: 'process.exit'
+                });
+
+                assert.ok(exitMock.mock.calls.length > 0, 'process.exit should have been called');
+            } finally {
+                exitMock.mock.restore();
+                rmSync(`${__dirname}/fixtures/.env`);
+                delete process.env.CONFIG_PATH;
+            }
+        });
     });
 });

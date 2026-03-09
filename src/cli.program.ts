@@ -1,3 +1,4 @@
+import { spawnSync } from 'child_process';
 import { Command } from 'commander';
 import { writeFileSync } from 'fs';
 
@@ -7,6 +8,7 @@ import { keyMatches, readContentFromFile, transformContent } from './reader';
 import { ConfigData } from './types';
 
 export const program = new Command();
+program.enablePositionalOptions();
 
 program
     .command('sh [files...]')
@@ -158,6 +160,43 @@ program
         }
     });
 
+program
+    .command('exec')
+    .description('Execute a command with environment variables loaded from .env files')
+    .option('-e, --env <environment>', 'The environment to load (defaults to APP_ENV)')
+    .option('-k, --key <key>', 'The decryption key (defaults to the value of the CONFIG_DECRYPTION_KEY environment variable)')
+    .allowExcessArguments()
+    .passThroughOptions()
+    .action((options, command) => {
+        const args = command.args;
+        if (!args.length) {
+            console.error('No command specified');
+            process.exit(1);
+        }
+
+        const environment = options.env ?? process.env.APP_ENV;
+        const files = environment ? ['.env', '.env.local', `.env.${environment}`, `.env.${environment}.local`] : ['.env', '.env.local'];
+
+        const key = options.key ?? process.env.CONFIG_DECRYPTION_KEY;
+        const env = loadEnvFromFiles(files, key);
+
+        const result = spawnSync(args[0], args.slice(1), {
+            stdio: 'inherit',
+            env: { ...env, ...process.env }
+        });
+
+        if (result.error) {
+            console.error(result.error.message);
+            process.exit(1);
+        }
+
+        if (result.signal) {
+            process.exit(128 + (result.status ?? 1));
+        }
+
+        process.exit(result.status ?? 1);
+    });
+
 // helpers
 
 function verifyFiles(files: string[]) {
@@ -176,7 +215,7 @@ function transformFile(path: string, transform: (data: ConfigData) => ConfigData
     writeFileSync(path, updatedContent);
 }
 
-function exportFiles(files: string[], key: string) {
+function loadEnvFromFiles(files: string[], key: string): ConfigData {
     const result: ConfigData = {};
     const decryptor = new Decryptor(key);
 
@@ -191,6 +230,12 @@ function exportFiles(files: string[], key: string) {
             });
         }
     }
+
+    return result;
+}
+
+function exportFiles(files: string[], key: string) {
+    const result = loadEnvFromFiles(files, key);
 
     for (const [key, value] of Object.entries(result)) {
         if (!process.env[key]) {
