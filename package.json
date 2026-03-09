@@ -4,6 +4,9 @@
     "description": "Runtime configuration encryption helpers",
     "license": "ISC",
     "author": "Sean Ferguson <hello@sgnl24.com>",
+    "repository": {
+        "url": "https://github.com/zyno-io/node-config"
+    },
     "bin": {
         "config-cli": "dist/cli.js"
     },
