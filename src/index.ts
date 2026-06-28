@@ -1,7 +1,7 @@
 import { parse } from 'dotenv';
 
 import { Decryptor, Encryptor } from './crypto';
-import { fileExists } from './helpers';
+import { fileExists, getDecryptionKeyFromEnv } from './helpers';
 import { readContentFromFile, transformContent } from './reader';
 import { ConfigData, DefaultLoadOptions, LoadOptions } from './types';
 
@@ -31,8 +31,9 @@ export function parseEnvContent<T extends ConfigData>(content: string, decryptor
 }
 
 export function loadConfig<T extends ConfigData>(options?: LoadOptions): T {
-    options = { ...DefaultLoadOptions, ...options };
+    options = { ...DefaultLoadOptions, key: getDecryptionKeyFromEnv(), ...options };
 
+    delete process.env.CONFIG_DECRYPTION_SECRET;
     delete process.env.CONFIG_DECRYPTION_KEY;
 
     if (!options.file) {

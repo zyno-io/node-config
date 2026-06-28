@@ -3,32 +3,35 @@ import { Command } from 'commander';
 import { writeFileSync } from 'fs';
 
 import { Decryptor, Encryptor } from './crypto';
-import { fileExists, generateConfigKeyPair } from './helpers';
+import { fileExists, generateConfigKeyPair, getDecryptionKeyFromEnv } from './helpers';
 import { keyMatches, readContentFromFile, transformContent } from './reader';
 import { ConfigData } from './types';
 
 export const program = new Command();
 program.enablePositionalOptions();
 
+const decryptionKeyOptionDescription =
+    'The decryption key (defaults to the value of the CONFIG_DECRYPTION_SECRET environment variable, falling back to CONFIG_DECRYPTION_KEY)';
+
 program
     .command('sh [files...]')
     .description('Output export statements to set variables from the specified .env files')
-    .option('-k, --key <key>', 'The decryption key (defaults to the value of the CONFIG_DECRYPTION_KEY environment variable)')
+    .option('-k, --key <key>', decryptionKeyOptionDescription)
     .action((files, options) => {
         files = files.length ? files : ['.env'];
         files = verifyFiles(files);
 
-        const key = options.key ?? process.env.CONFIG_DECRYPTION_KEY;
+        const key = options.key ?? getDecryptionKeyFromEnv();
         exportFiles(files, key);
     });
 
 program
     .command('shenv [environment]')
     .description('Output export statements to set variables from the specified environment')
-    .option('-k, --key <key>', 'The decryption key (defaults to the value of the CONFIG_DECRYPTION_KEY environment variable)')
+    .option('-k, --key <key>', decryptionKeyOptionDescription)
     .action((env, options) => {
         const files = ['.env', '.env.local', `.env.${env}`, `.env.${env}.local`];
-        const key = options.key ?? process.env.CONFIG_DECRYPTION_KEY;
+        const key = options.key ?? getDecryptionKeyFromEnv();
         exportFiles(files, key);
     });
 
@@ -67,12 +70,12 @@ program
 program
     .command('decrypt [files...]')
     .description('Decrypts the specified .env files')
-    .option('-k, --key <key>', 'The decryption key (defaults to the value of the CONFIG_DECRYPTION_KEY environment variable)')
+    .option('-k, --key <key>', decryptionKeyOptionDescription)
     .action((files, options) => {
         files = files.length ? files : ['.env'];
         files = verifyFiles(files);
 
-        const key = options.key ?? process.env.CONFIG_DECRYPTION_KEY;
+        const key = options.key ?? getDecryptionKeyFromEnv();
         if (!key) {
             throw new Error('No decryption key specified');
         }
@@ -99,20 +102,20 @@ program
     .action(() => {
         const { privateKey, publicKey } = generateConfigKeyPair();
         console.log(`CONFIG_ENCRYPTION_KEY=${publicKey}\n`);
-        console.log(`CONFIG_DECRYPTION_KEY=${privateKey}\n`);
+        console.log(`CONFIG_DECRYPTION_SECRET=${privateKey}\n`);
     });
 
 program
     .command('verify [files...]')
     .description('Verifies that all secrets are encrypted correctly in a given .env file')
-    .option('-k, --key <key>', 'The decryption key (defaults to the value of the CONFIG_DECRYPTION_KEY environment variable)')
+    .option('-k, --key <key>', decryptionKeyOptionDescription)
     .action((files, options) => {
         files = files.length ? files : ['.env'];
         files = verifyFiles(files);
 
         let numTotalErrors = 0;
 
-        const key = options.key ?? process.env.CONFIG_DECRYPTION_KEY;
+        const key = options.key ?? getDecryptionKeyFromEnv();
         const decryptor = key ? new Decryptor(key) : null;
 
         if (!decryptor) {
@@ -164,7 +167,7 @@ program
     .command('exec')
     .description('Execute a command with environment variables loaded from .env files')
     .option('-e, --env <environment>', 'The environment to load (defaults to APP_ENV)')
-    .option('-k, --key <key>', 'The decryption key (defaults to the value of the CONFIG_DECRYPTION_KEY environment variable)')
+    .option('-k, --key <key>', decryptionKeyOptionDescription)
     .allowExcessArguments()
     .passThroughOptions()
     .action((options, command) => {
@@ -177,7 +180,7 @@ program
         const environment = options.env ?? process.env.APP_ENV;
         const files = environment ? ['.env', '.env.local', `.env.${environment}`, `.env.${environment}.local`] : ['.env', '.env.local'];
 
-        const key = options.key ?? process.env.CONFIG_DECRYPTION_KEY;
+        const key = options.key ?? getDecryptionKeyFromEnv();
         const env = loadEnvFromFiles(files, key);
 
         const result = spawnSync(args[0], args.slice(1), {

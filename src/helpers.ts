@@ -20,6 +20,10 @@ export function generateConfigKeyPair() {
     };
 }
 
+export function getDecryptionKeyFromEnv() {
+    return process.env.CONFIG_DECRYPTION_SECRET ?? process.env.CONFIG_DECRYPTION_KEY;
+}
+
 export function getPath(path: string) {
     if (process.env.CONFIG_PATH) {
         return `${process.env.CONFIG_PATH}/${path}`;

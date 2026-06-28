@@ -1,9 +1,9 @@
 {
     "name": "@zyno-io/config",
-    "version": "1.11.0",
+    "version": "1.12.0",
     "description": "Runtime configuration encryption helpers",
     "license": "ISC",
-    "author": "Sean Ferguson <hello@sgnl24.com>",
+    "author": "Zyno Consulting <hello@zyno.io>",
     "repository": {
         "url": "https://github.com/zyno-io/node-config"
     },

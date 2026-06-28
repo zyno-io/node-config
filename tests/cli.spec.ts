@@ -15,6 +15,7 @@ describe('CLI', () => {
     beforeEach(() => {
         mock.restoreAll();
         delete process.env.CONFIG_ENCRYPTION_KEY;
+        delete process.env.CONFIG_DECRYPTION_SECRET;
         delete process.env.CONFIG_DECRYPTION_KEY;
         delete process.env.APP_ENV;
         cpSync(`${__dirname}/fixtures/sample.env`, `${__dirname}/fixtures/cli.env.test`);
@@ -33,8 +34,8 @@ describe('CLI', () => {
             'should log CONFIG_ENCRYPTION_KEY'
         );
         assert.ok(
-            logMock.mock.calls.some(call => call.arguments[0].startsWith('CONFIG_DECRYPTION_KEY=')),
-            'should log CONFIG_DECRYPTION_KEY'
+            logMock.mock.calls.some(call => call.arguments[0].startsWith('CONFIG_DECRYPTION_SECRET=')),
+            'should log CONFIG_DECRYPTION_SECRET'
         );
     });
 
@@ -73,7 +74,7 @@ describe('CLI', () => {
 
         const { privateKey, publicKey } = generateConfigKeyPair();
         process.env.CONFIG_ENCRYPTION_KEY = publicKey;
-        process.env.CONFIG_DECRYPTION_KEY = privateKey;
+        process.env.CONFIG_DECRYPTION_SECRET = privateKey;
 
         program.parse(['encrypt', `${__dirname}/fixtures/cli.env.test`], { from: 'user' });
         const encryptedContent = readFileSync(`${__dirname}/fixtures/cli.env.test`, 'utf8');
@@ -82,6 +83,40 @@ describe('CLI', () => {
         assert.match(encryptedContent, /^VAR_5_SECRET=\$\$\[.*\]$/m);
 
         program.parse(['decrypt', `${__dirname}/fixtures/cli.env.test`], { from: 'user' });
+        const afterContent = readFileSync(`${__dirname}/fixtures/cli.env.test`, 'utf8');
+        assert.strictEqual(beforeContent, afterContent);
+    });
+
+    it('should still decrypt with the legacy CONFIG_DECRYPTION_KEY environment variable', async () => {
+        const program = await getProgram();
+
+        const beforeContent = readFileSync(`${__dirname}/fixtures/cli.env.test`, 'utf8');
+
+        const { privateKey, publicKey } = generateConfigKeyPair();
+        process.env.CONFIG_ENCRYPTION_KEY = publicKey;
+        process.env.CONFIG_DECRYPTION_KEY = privateKey;
+
+        program.parse(['encrypt', `${__dirname}/fixtures/cli.env.test`], { from: 'user' });
+        program.parse(['decrypt', `${__dirname}/fixtures/cli.env.test`], { from: 'user' });
+
+        const afterContent = readFileSync(`${__dirname}/fixtures/cli.env.test`, 'utf8');
+        assert.strictEqual(beforeContent, afterContent);
+    });
+
+    it('should prefer CONFIG_DECRYPTION_SECRET over CONFIG_DECRYPTION_KEY', async () => {
+        const program = await getProgram();
+
+        const beforeContent = readFileSync(`${__dirname}/fixtures/cli.env.test`, 'utf8');
+
+        const preferred = generateConfigKeyPair();
+        const legacy = generateConfigKeyPair();
+        process.env.CONFIG_ENCRYPTION_KEY = preferred.publicKey;
+        process.env.CONFIG_DECRYPTION_SECRET = preferred.privateKey;
+        process.env.CONFIG_DECRYPTION_KEY = legacy.privateKey;
+
+        program.parse(['encrypt', `${__dirname}/fixtures/cli.env.test`], { from: 'user' });
+        program.parse(['decrypt', `${__dirname}/fixtures/cli.env.test`], { from: 'user' });
+
         const afterContent = readFileSync(`${__dirname}/fixtures/cli.env.test`, 'utf8');
         assert.strictEqual(beforeContent, afterContent);
     });

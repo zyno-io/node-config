@@ -67,7 +67,7 @@ const config = loadConfig();
 
 const config = loadConfig({
   // key?: string
-  //   the decryption key. defaults to process.env.CONFIG_DECRYPTION_KEY
+  //   the decryption key. defaults to process.env.CONFIG_DECRYPTION_SECRET
   key: '...long key...'
 
   // file?: string | string[]
@@ -90,6 +90,8 @@ const config = loadConfig({
 });
 ```
 
+For backwards compatibility, `CONFIG_DECRYPTION_KEY` is still supported as a fallback when `CONFIG_DECRYPTION_SECRET` is not set.
+
 ## Decrypt & Load Config into process.env using API
 
 ```
@@ -110,7 +112,7 @@ This invocation will load, decrypt, and parse the `.env` and `.env.local` files 
 
 The `env` key above will be set to `APP_ENV` environment variable, if set.
 
-Be sure the decryption key is set as `CONFIG_DECRYPTION_KEY` in your environment.
+Be sure the decryption key is set as `CONFIG_DECRYPTION_SECRET` in your environment.
 
 ## Execute a command with config loaded
 
@@ -127,7 +129,7 @@ The environment is resolved from `-e` if provided, otherwise from the `APP_ENV` 
 
 The subprocess inherits the current environment. Values from `.env` files are merged in, but existing environment variables take precedence (matching the behavior of `sh`/`shenv`).
 
-Be sure the decryption key is set as `CONFIG_DECRYPTION_KEY` in your environment (or pass `-k`).
+Be sure the decryption key is set as `CONFIG_DECRYPTION_SECRET` in your environment (or pass `-k`).
 
 ## Concatenate config for an environment
 
@@ -174,11 +176,11 @@ eval $(npx config-cli shenv staging)
 eval $(docker run --rm -it -v `pwd`:/src -w /src ghcr.io/zyno-io/node-config shenv staging)
 ```
 
-Be sure the decryption key is set as `CONFIG_DECRYPTION_KEY` in your environment.
+Be sure the decryption key is set as `CONFIG_DECRYPTION_SECRET` in your environment.
 
 ## Decryption via CLI
 
-With `CONFIG_DECRYPTION_KEY` in the environment:
+With `CONFIG_DECRYPTION_SECRET` in the environment:
 
 ```
 npx config-cli decrypt .env

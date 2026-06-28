@@ -1,3 +1,5 @@
+import { getDecryptionKeyFromEnv } from './helpers';
+
 export type ConfigData = Record<string, string>;
 
 export interface DecryptOptions {
@@ -16,7 +18,7 @@ export interface EncryptOptions {
 }
 
 export const DefaultLoadOptions: Partial<LoadOptions> = {
-    key: process.env.CONFIG_DECRYPTION_KEY
+    key: getDecryptionKeyFromEnv()
 };
 
 export const DefaultEncryptOptions: Partial<EncryptOptions> = {
