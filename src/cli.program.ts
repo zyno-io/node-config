@@ -197,6 +197,31 @@ program
         process.exit(result.status ?? 1);
     });
 
+program
+    .command('concat [files...]')
+    .description(
+        'Merge .env files into a single output (later files win on duplicate keys), keeping values verbatim so encrypted secrets stay encrypted'
+    )
+    .option('-e, --env <environment>', 'Compose the file list from an environment name (.env + .env.<environment>) instead of listing files')
+    .option('--local', 'Also include .local files (developer overrides; excluded by default)')
+    .option(
+        '-x, --exclude <pattern>',
+        'Exclude keys matching this regular expression (repeatable, e.g. -x ^VITE_)',
+        (value: string, previous: string[]) => previous.concat(value),
+        [] as string[]
+    )
+    .action((files, options) => {
+        let resolved: string[];
+        if (options.env) {
+            resolved = options.local ? ['.env', '.env.local', `.env.${options.env}`, `.env.${options.env}.local`] : ['.env', `.env.${options.env}`];
+        } else {
+            resolved = verifyFiles(files.length ? files : ['.env']);
+        }
+
+        const exclude = (options.exclude as string[]).map(pattern => new RegExp(pattern));
+        console.log(concatEnvFiles(resolved, exclude));
+    });
+
 // helpers
 
 function verifyFiles(files: string[]) {
@@ -242,4 +267,37 @@ function exportFiles(files: string[], key: string) {
             console.log(`export ${key}="${value}"`);
         }
     }
+}
+
+function concatEnvFiles(files: string[], exclude: RegExp[]): string {
+    const merged: ConfigData = {};
+
+    for (const file of files) {
+        if (!fileExists(file)) {
+            continue;
+        }
+
+        const content = readContentFromFile(file);
+        for (const line of content.split('\n')) {
+            if (line.startsWith('#')) {
+                continue;
+            }
+
+            const matches = line.match(/^([^=]+)=(.*)$/);
+            if (!matches) {
+                continue;
+            }
+
+            const [, key, value] = matches;
+            if (exclude.length && keyMatches(key, exclude)) {
+                continue;
+            }
+
+            merged[key] = value;
+        }
+    }
+
+    return Object.entries(merged)
+        .map(([key, value]) => `${key}=${value}`)
+        .join('\n');
 }

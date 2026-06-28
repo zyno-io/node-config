@@ -129,6 +129,31 @@ The subprocess inherits the current environment. Values from `.env` files are me
 
 Be sure the decryption key is set as `CONFIG_DECRYPTION_KEY` in your environment (or pass `-k`).
 
+## Concatenate config for an environment
+
+Merge one or more `.env` files into a single output **without decrypting** — encrypted `$$[...]` values pass through verbatim, so no decryption key is required. This is useful for producing one encrypted blob to hand to infrastructure, e.g. a Kubernetes ConfigMap consumed by [config-controller](https://github.com/zyno-io/config-controller).
+
+Later files win on duplicate keys (matching `loadConfig`).
+
+```
+# explicit files (later wins)
+npx config-cli concat .env .env.production
+
+# or compose from an environment name -> loads .env + .env.<environment>
+npx config-cli concat -e production
+```
+
+Unlike `exec`/`shenv`, the `-e` form excludes developer `.local` files (`.env.local`, `.env.<environment>.local`) by default since they should not reach a deploy; pass `--local` to include them.
+
+Drop keys you don't want in the output with one or more `-x/--exclude` regular expressions — for example, to strip build-time front-end vars and the encryption key from a backend deploy blob:
+
+```
+npx config-cli concat -e production -x '^(VITE_|CONFIG_)' > .env.runtime
+
+# alternatively, use Docker
+docker run --rm -it -v `pwd`:/src -w /src ghcr.io/zyno-io/node-config concat -e production -x '^(VITE_|CONFIG_)'
+```
+
 ## Decrypt & Load Config into other environments
 
 Using specific files:

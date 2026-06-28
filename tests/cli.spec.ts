@@ -1,6 +1,6 @@
 import { cpSync, readFileSync, rmSync, writeFileSync } from 'fs';
-import { describe, it, beforeEach, after, mock } from 'node:test';
 import assert from 'node:assert';
+import { describe, it, beforeEach, after, mock } from 'node:test';
 
 import { generateConfigKeyPair } from '../src/helpers';
 
@@ -350,6 +350,102 @@ describe('CLI', () => {
             } finally {
                 exitMock.mock.restore();
                 rmSync(`${__dirname}/fixtures/.env`);
+                delete process.env.CONFIG_PATH;
+            }
+        });
+    });
+
+    describe('concat', () => {
+        it('should merge files with later files winning on duplicate keys', async () => {
+            const program = await getProgram();
+            const a = `${__dirname}/fixtures/concat.a.test`;
+            const b = `${__dirname}/fixtures/concat.b.test`;
+            writeFileSync(a, 'SHARED=from_a\nONLY_A=1\n');
+            writeFileSync(b, 'SHARED=from_b\nONLY_B=2\n');
+
+            const logMock = mock.method(console, 'log', () => {});
+            try {
+                program.parse(['concat', a, b], { from: 'user' });
+                const output = logMock.mock.calls.map(call => call.arguments[0]).join('\n');
+                assert.match(output, /^SHARED=from_b$/m);
+                assert.match(output, /^ONLY_A=1$/m);
+                assert.match(output, /^ONLY_B=2$/m);
+                assert.doesNotMatch(output, /from_a/);
+            } finally {
+                rmSync(a, { force: true });
+                rmSync(b, { force: true });
+            }
+        });
+
+        it('should keep encrypted values verbatim without a decryption key', async () => {
+            const program = await getProgram();
+            const f = `${__dirname}/fixtures/concat.enc.test`;
+            writeFileSync(f, 'PLAIN=hello\nTOKEN_SECRET=$$[ZW5jcnlwdGVk]\n');
+
+            const logMock = mock.method(console, 'log', () => {});
+            try {
+                program.parse(['concat', f], { from: 'user' });
+                const output = logMock.mock.calls.map(call => call.arguments[0]).join('\n');
+                assert.match(output, /^TOKEN_SECRET=\$\$\[ZW5jcnlwdGVk\]$/m);
+                assert.match(output, /^PLAIN=hello$/m);
+            } finally {
+                rmSync(f, { force: true });
+            }
+        });
+
+        it('should exclude keys matching --exclude patterns', async () => {
+            const program = await getProgram();
+            const f = `${__dirname}/fixtures/concat.exclude.test`;
+            writeFileSync(f, 'VITE_PUBLIC=x\nBACKEND=y\n');
+
+            const logMock = mock.method(console, 'log', () => {});
+            try {
+                program.parse(['concat', f, '-x', '^VITE_'], { from: 'user' });
+                const output = logMock.mock.calls.map(call => call.arguments[0]).join('\n');
+                assert.match(output, /^BACKEND=y$/m);
+                assert.doesNotMatch(output, /VITE_PUBLIC/);
+            } finally {
+                rmSync(f, { force: true });
+            }
+        });
+
+        it('should resolve env files with -e and exclude .local by default', async () => {
+            const program = await getProgram();
+            process.env.CONFIG_PATH = `${__dirname}/fixtures`;
+            writeFileSync(`${__dirname}/fixtures/.env`, 'BASE=base\nSHARED=base\n');
+            writeFileSync(`${__dirname}/fixtures/.env.staging`, 'SHARED=staging\nSTG=1\n');
+            writeFileSync(`${__dirname}/fixtures/.env.staging.local`, 'LOCAL_ONLY=secret\n');
+
+            const logMock = mock.method(console, 'log', () => {});
+            try {
+                program.parse(['concat', '-e', 'staging'], { from: 'user' });
+                const output = logMock.mock.calls.map(call => call.arguments[0]).join('\n');
+                assert.match(output, /^BASE=base$/m);
+                assert.match(output, /^SHARED=staging$/m);
+                assert.match(output, /^STG=1$/m);
+                assert.doesNotMatch(output, /LOCAL_ONLY/);
+            } finally {
+                rmSync(`${__dirname}/fixtures/.env`, { force: true });
+                rmSync(`${__dirname}/fixtures/.env.staging`, { force: true });
+                rmSync(`${__dirname}/fixtures/.env.staging.local`, { force: true });
+                delete process.env.CONFIG_PATH;
+            }
+        });
+
+        it('should include .local files with --local', async () => {
+            const program = await getProgram();
+            process.env.CONFIG_PATH = `${__dirname}/fixtures`;
+            writeFileSync(`${__dirname}/fixtures/.env`, 'BASE=base\n');
+            writeFileSync(`${__dirname}/fixtures/.env.staging.local`, 'LOCAL_ONLY=secret\n');
+
+            const logMock = mock.method(console, 'log', () => {});
+            try {
+                program.parse(['concat', '-e', 'staging', '--local'], { from: 'user' });
+                const output = logMock.mock.calls.map(call => call.arguments[0]).join('\n');
+                assert.match(output, /^LOCAL_ONLY=secret$/m);
+            } finally {
+                rmSync(`${__dirname}/fixtures/.env`, { force: true });
+                rmSync(`${__dirname}/fixtures/.env.staging.local`, { force: true });
                 delete process.env.CONFIG_PATH;
             }
         });
