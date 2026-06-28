@@ -67,6 +67,31 @@ describe('CLI', () => {
         assert.strictEqual(beforeContent, afterContent);
     });
 
+    it('should decrypt to stdout without modifying the file', async () => {
+        const program = await getProgram();
+
+        const beforeContent = readFileSync(`${__dirname}/fixtures/cli.env.test`, 'utf8');
+
+        const { privateKey, publicKey } = generateConfigKeyPair();
+
+        program.parse(['encrypt', `${__dirname}/fixtures/cli.env.test`, '-k', publicKey], { from: 'user' });
+        const encryptedContent = readFileSync(`${__dirname}/fixtures/cli.env.test`, 'utf8');
+        const output: string[] = [];
+        const writeMock = mock.method(process.stdout, 'write', (chunk: string | Uint8Array) => {
+            output.push(chunk.toString());
+            return true;
+        });
+
+        try {
+            program.parse(['decrypt', `${__dirname}/fixtures/cli.env.test`, '-k', privateKey, '--stdout'], { from: 'user' });
+
+            assert.strictEqual(output.join(''), beforeContent);
+            assert.strictEqual(readFileSync(`${__dirname}/fixtures/cli.env.test`, 'utf8'), encryptedContent);
+        } finally {
+            writeMock.mock.restore();
+        }
+    });
+
     it('should encrypt and decrypt with keys specified in the environment', async () => {
         const program = await getProgram();
 

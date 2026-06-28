@@ -71,6 +71,7 @@ program
     .command('decrypt [files...]')
     .description('Decrypts the specified .env files')
     .option('-k, --key <key>', decryptionKeyOptionDescription)
+    .option('--stdout', 'Print decrypted content to stdout instead of writing files in place')
     .action((files, options) => {
         files = files.length ? files : ['.env'];
         files = verifyFiles(files);
@@ -81,19 +82,19 @@ program
         }
 
         const decryptor = new Decryptor(key);
-        for (const file of files) {
-            transformFile(file, data => {
-                for (const key of Object.keys(data)) {
-                    try {
-                        data[key] = decryptor.decryptValueIfEncrypted(data[key]);
-                    } catch (err) {
-                        console.error(`${file}: ${key} cannot be decrypted`);
-                        throw err;
-                    }
+        files.forEach((file: string, index: number) => {
+            const decryptedContent = decryptFileContent(file, decryptor);
+
+            if (options.stdout) {
+                process.stdout.write(decryptedContent);
+                if (index < files.length - 1 && !decryptedContent.endsWith('\n')) {
+                    process.stdout.write('\n');
                 }
-                return data;
-            });
-        }
+                return;
+            }
+
+            writeFileSync(file, decryptedContent);
+        });
     });
 
 program
@@ -101,8 +102,8 @@ program
     .description('Generate a public/private key pair for encryption')
     .action(() => {
         const { privateKey, publicKey } = generateConfigKeyPair();
-        console.log(`CONFIG_ENCRYPTION_KEY=${publicKey}\n`);
-        console.log(`CONFIG_DECRYPTION_SECRET=${privateKey}\n`);
+        console.log(`CONFIG_ENCRYPTION_KEY=${publicKey}`);
+        console.log(`CONFIG_DECRYPTION_SECRET=${privateKey}`);
     });
 
 program
@@ -241,6 +242,21 @@ function transformFile(path: string, transform: (data: ConfigData) => ConfigData
     const originalContent = readContentFromFile(path);
     const updatedContent = transformContent(originalContent, transform);
     writeFileSync(path, updatedContent);
+}
+
+function decryptFileContent(file: string, decryptor: Decryptor) {
+    const originalContent = readContentFromFile(file);
+    return transformContent(originalContent, data => {
+        for (const key of Object.keys(data)) {
+            try {
+                data[key] = decryptor.decryptValueIfEncrypted(data[key]);
+            } catch (err) {
+                console.error(`${file}: ${key} cannot be decrypted`);
+                throw err;
+            }
+        }
+        return data;
+    });
 }
 
 function loadEnvFromFiles(files: string[], key: string): ConfigData {

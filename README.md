@@ -4,13 +4,16 @@ TypeScript package for encrypting & decrypting secrets in and loading config fro
 
 ## How does this work?
 
-A pair of RSA-2048 keys (one public, one private) are generated as your encryption keys. For each secret that needs to be encrypted:
+A pair of X25519 keys (one public, one private) are generated as your encryption keys. For each secret that needs to be encrypted:
 
-- a random AES-256 key is generated
-- the secret is encrypted with the AES-256 key
-- the key is wrapped with the public RSA key
-- the version number (of the encryption scheme), the encrypted/wrapped key, the AES IV, and the AES-encrypted secret are combined into a single payload
+- an ephemeral X25519 key pair is generated
+- a shared secret is derived from the ephemeral private key and your public encryption key
+- an AES-256-GCM key is derived from that shared secret
+- the secret is encrypted with AES-256-GCM
+- the version number (of the encryption scheme), the ephemeral public key, the AES-GCM IV, the authentication tag, and the encrypted secret are combined into a single payload
 - the plaintext secret is replaced with the payload, base64-encoded (and a prefix/suffix to indicate that it's an encrypted value)
+
+Existing RSA-2048 keys are still supported. Passing an RSA public key to the encrypt command keeps producing the legacy v1 format, and existing RSA-encrypted values continue to decrypt with their matching RSA private keys.
 
 ## Installation
 
@@ -51,7 +54,7 @@ Your .env file now contains encrypted values:
 ```
 CONFIG_ENCRYPTION_KEY=...copied from above...
 TWILIO_ACCOUNT_SID=AC123456
-TWILIO_AUTH_TOKEN_SECRET=$$[AQJLlkLEOjifkSWRHozwOK78xJfym11/utjD7NZwbYXOUTMMXHg+Fa34wt/ytB4LRB2kiD6qXSYTQQLPYRmxN+1/VcvWCATWPUXJEN+pl8MiaO5boOGMYqcTT9JVUQ+dyEZelJkR+fuhzAeoANKyicPFwYa7DiLRwUlLxca/7lnEiROzrh1YNtvWPM0+J3yjjh/zbwbRUWCVFRcP/jmToE5EGifGYhpSjzY004LDWNfF8fKiotZiISMXq8vbDBBpmYugmkHy6Q+DXMIoVsRhg/jY1LSO8ycNaE8eAjgS05tjnXo35Nx9Wr+QSKAU99+M0yK3zfq7nSnIfVQ7IRQXNV4N2Dte02ZX+AkPwNg/mPeWXD+Acnxzu2KDi4R9nmb1Qnk6VJ+BlejbtO+KhGexkDF9a2pvZyN+LDQM3c1OfL/WpqdIZkSsg7fhDWHYnTGUlr1tOxPndptc6im65Kq05/0ynB/e04HMopDz1EmkSXVV]
+TWILIO_AUTH_TOKEN_SECRET=$$[AjAqMAUGAytlbgMhAOqV2hOeR9yxQunkkgtuX4IvrT7SfVzmmO7vX1rTJQUCITfehft1MhXIpk8gr4FmwbtERaKaqawiciDh9JyJN9+wTTdTwKvJ]
 ```
 
 New values can be added or existing values updated, and then simply re-run the encrypt command to encrypt the new values.
@@ -180,6 +183,8 @@ Be sure the decryption key is set as `CONFIG_DECRYPTION_SECRET` in your environm
 
 ## Decryption via CLI
 
+By default, `decrypt` updates the specified files in place.
+
 With `CONFIG_DECRYPTION_SECRET` in the environment:
 
 ```
@@ -196,6 +201,12 @@ npx config-cli decrypt -k "LONG_DECRYPTION_KEY" .env
 
 # alternatively, use Docker
 docker run --rm -it -v `pwd`:/src -w /src ghcr.io/zyno-io/node-config decrypt -k "LONG_DECRYPTION_KEY" .env
+```
+
+To print decrypted content without modifying the file, pass `--stdout`:
+
+```
+npx config-cli decrypt --stdout .env
 ```
 
 ## Verify encrypted secrets on pre-commit

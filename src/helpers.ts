@@ -2,8 +2,7 @@ import { generateKeyPairSync } from 'crypto';
 import { existsSync } from 'fs';
 
 export function generateConfigKeyPair() {
-    const { privateKey, publicKey } = generateKeyPairSync('rsa', {
-        modulusLength: 2048,
+    const { privateKey, publicKey } = generateKeyPairSync('x25519', {
         publicKeyEncoding: {
             type: 'spki',
             format: 'der'
