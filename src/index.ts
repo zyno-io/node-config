@@ -1,7 +1,7 @@
 import { parse } from 'dotenv';
 
 import { Decryptor, Encryptor } from './crypto';
-import { fileExists, getDecryptionKeyFromEnv } from './helpers';
+import { decryptProcessEnvSecrets, fileExists, getDecryptionKeyFromEnv } from './helpers';
 import { readContentFromFile, transformContent } from './reader';
 import { ConfigData, DefaultLoadOptions, LoadOptions } from './types';
 
@@ -55,7 +55,7 @@ export function loadConfig<T extends ConfigData>(options?: LoadOptions): T {
     }
 
     if (options.mergeProcessEnv !== false) {
-        Object.assign(config, process.env);
+        Object.assign(config, decryptProcessEnvSecrets(process.env, decryptor));
     }
 
     return config as T;

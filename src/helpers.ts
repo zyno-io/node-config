@@ -1,6 +1,10 @@
 import { generateKeyPairSync } from 'crypto';
 import { existsSync } from 'fs';
 
+import type { ConfigData } from './types';
+
+import { Decryptor } from './crypto';
+
 export function generateConfigKeyPair() {
     const { privateKey, publicKey } = generateKeyPairSync('x25519', {
         publicKeyEncoding: {
@@ -32,4 +36,27 @@ export function getPath(path: string) {
 
 export function fileExists(path: string) {
     return existsSync(getPath(path));
+}
+
+export function decryptProcessEnvSecrets(env: NodeJS.ProcessEnv, decryptor: Decryptor): ConfigData {
+    const result: ConfigData = {};
+
+    for (const [key, value] of Object.entries(env)) {
+        if (value === undefined) {
+            continue;
+        }
+
+        if (!key.endsWith('_SECRET')) {
+            result[key] = value;
+            continue;
+        }
+
+        try {
+            result[key] = decryptor.decryptValueIfEncrypted(value);
+        } catch {
+            result[key] = value;
+        }
+    }
+
+    return result;
 }

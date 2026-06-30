@@ -89,6 +89,7 @@ const config = loadConfig({
 
   // mergeProcessEnv?: boolean
   //   automatically merge process.env values into the resulting config object
+  //   keys ending in _SECRET are decrypted if possible, and left unchanged if decryption fails
   //   defaults to true
 });
 ```
@@ -131,6 +132,7 @@ docker run --rm -it -v `pwd`:/src -w /src ghcr.io/zyno-io/node-config exec -e pr
 The environment is resolved from `-e` if provided, otherwise from the `APP_ENV` environment variable. With an environment set, loads `.env`, `.env.local`, `.env.<environment>`, and `.env.<environment>.local`. Without either, loads `.env` and `.env.local`.
 
 The subprocess inherits the current environment. Values from `.env` files are merged in, but existing environment variables take precedence (matching the behavior of `sh`/`shenv`).
+Inherited environment keys ending in `_SECRET` are decrypted if possible, and left unchanged if decryption fails.
 
 Be sure the decryption key is set as `CONFIG_DECRYPTION_SECRET` in your environment (or pass `-k`).
 
@@ -146,9 +148,21 @@ npx config-cli concat .env .env.production
 
 # or compose from an environment name -> loads .env + .env.<environment>
 npx config-cli concat -e production
+
+# output as JSON or YAML
+npx config-cli concat -e production --format json
+npx config-cli concat -e production --format yaml
+
+# prefix output keys
+npx config-cli concat -e production --prefix pre_
+npx config-cli concat -e production --format yaml --prefix top.
+npx config-cli concat -e production --format json --prefix top.pre_
 ```
 
 Unlike `exec`/`shenv`, the `-e` form excludes developer `.local` files (`.env.local`, `.env.<environment>.local`) by default since they should not reach a deploy; pass `--local` to include them.
+
+The default output format is dotenv. `--format json` and `--format yaml` reformat the merged key/value data without decrypting or otherwise changing values.
+Prefixes are literal for dotenv output. For JSON and YAML output, prefixes containing `.` create nested objects; the final segment prefixes the config keys, so `--prefix top.pre_` produces keys under `top` named `pre_<KEY>`.
 
 Drop keys you don't want in the output with one or more `-x/--exclude` regular expressions — for example, to strip build-time front-end vars and the encryption key from a backend deploy blob:
 

@@ -1,0 +1,4 @@
+PLAIN: 'hello'
+EMPTY: ''
+TOKEN_SECRET: '$$[ZW5jcnlwdGVk]'
+'WEIRD-KEY': 'needs quoting'

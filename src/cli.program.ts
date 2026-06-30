@@ -3,9 +3,12 @@ import { Command } from 'commander';
 import { writeFileSync } from 'fs';
 
 import { Decryptor, Encryptor } from './crypto';
-import { fileExists, generateConfigKeyPair, getDecryptionKeyFromEnv } from './helpers';
+import { decryptProcessEnvSecrets, fileExists, generateConfigKeyPair, getDecryptionKeyFromEnv } from './helpers';
 import { keyMatches, readContentFromFile, transformContent } from './reader';
 import { ConfigData } from './types';
+
+type ConcatOutputFormat = 'dotenv' | 'json' | 'yaml';
+type FormattedConfigData = { [key: string]: string | FormattedConfigData };
 
 export const program = new Command();
 program.enablePositionalOptions();
@@ -183,10 +186,11 @@ program
 
         const key = options.key ?? getDecryptionKeyFromEnv();
         const env = loadEnvFromFiles(files, key);
+        const inheritedEnv = decryptProcessEnvSecrets(process.env, new Decryptor(key));
 
         const result = spawnSync(args[0], args.slice(1), {
             stdio: 'inherit',
-            env: { ...env, ...process.env }
+            env: { ...env, ...inheritedEnv }
         });
 
         if (result.error) {
@@ -208,6 +212,8 @@ program
     )
     .option('-e, --env <environment>', 'Compose the file list from an environment name (.env + .env.<environment>) instead of listing files')
     .option('--local', 'Also include .local files (developer overrides; excluded by default)')
+    .option('-f, --format <format>', 'Output format: dotenv, json, or yaml', 'dotenv')
+    .option('-p, --prefix <prefix>', 'Prefix output keys')
     .option(
         '-x, --exclude <pattern>',
         'Exclude keys matching this regular expression (repeatable, e.g. -x ^VITE_)',
@@ -223,7 +229,8 @@ program
         }
 
         const exclude = (options.exclude as string[]).map(pattern => new RegExp(pattern));
-        console.log(concatEnvFiles(resolved, exclude));
+        const format = getConcatOutputFormat(options.format);
+        console.log(formatConfigData(concatEnvFiles(resolved, exclude), format, options.prefix));
     });
 
 // helpers
@@ -288,7 +295,7 @@ function exportFiles(files: string[], key: string) {
     }
 }
 
-function concatEnvFiles(files: string[], exclude: RegExp[]): string {
+function concatEnvFiles(files: string[], exclude: RegExp[]): ConfigData {
     const merged: ConfigData = {};
 
     for (const file of files) {
@@ -316,7 +323,84 @@ function concatEnvFiles(files: string[], exclude: RegExp[]): string {
         }
     }
 
-    return Object.entries(merged)
+    return merged;
+}
+
+function getConcatOutputFormat(format: string): ConcatOutputFormat {
+    if (format === 'dotenv' || format === 'json' || format === 'yaml') {
+        return format;
+    }
+
+    throw new Error(`Unsupported concat output format: ${format}`);
+}
+
+function formatConfigData(data: ConfigData, format: ConcatOutputFormat, prefix = ''): string {
+    const formatted = applyConcatPrefix(data, format, prefix);
+
+    if (format === 'json') {
+        return JSON.stringify(formatted, null, 4);
+    }
+
+    if (format === 'yaml') {
+        return formatYamlData(formatted);
+    }
+
+    return Object.entries(formatted)
         .map(([key, value]) => `${key}=${value}`)
         .join('\n');
+}
+
+function applyConcatPrefix(data: ConfigData, format: ConcatOutputFormat, prefix: string): FormattedConfigData {
+    if (!prefix || Object.keys(data).length === 0) {
+        return data;
+    }
+
+    if (format === 'dotenv' || !prefix.includes('.')) {
+        return prefixConfigKeys(data, prefix);
+    }
+
+    const parts = prefix.split('.');
+    const keyPrefix = parts.pop() ?? '';
+    let formatted: FormattedConfigData = prefixConfigKeys(data, keyPrefix);
+
+    for (const part of parts.reverse()) {
+        formatted = { [part]: formatted };
+    }
+
+    return formatted;
+}
+
+function prefixConfigKeys(data: ConfigData, prefix: string): ConfigData {
+    const prefixed: ConfigData = {};
+
+    for (const [key, value] of Object.entries(data)) {
+        prefixed[`${prefix}${key}`] = value;
+    }
+
+    return prefixed;
+}
+
+function formatYamlData(data: FormattedConfigData, indent = 0): string {
+    return Object.entries(data)
+        .map(([key, value]) => {
+            const prefix = `${'  '.repeat(indent)}${formatYamlKey(key)}:`;
+            if (typeof value === 'string') {
+                return `${prefix} ${formatYamlString(value)}`;
+            }
+
+            return `${prefix}\n${formatYamlData(value, indent + 1)}`;
+        })
+        .join('\n');
+}
+
+function formatYamlKey(key: string): string {
+    if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+        return key;
+    }
+
+    return formatYamlString(key);
+}
+
+function formatYamlString(value: string): string {
+    return `'${value.replace(/'/g, "''")}'`;
 }

@@ -1,0 +1,4 @@
+pre_PLAIN: 'hello'
+pre_EMPTY: ''
+pre_TOKEN_SECRET: '$$[ZW5jcnlwdGVk]'
+'pre_WEIRD-KEY': 'needs quoting'

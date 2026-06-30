@@ -41,6 +41,33 @@ describe('API', () => {
         }
     });
 
+    it('should decrypt encrypted process.env _SECRET values without throwing on failures', async () => {
+        const { privateKey, publicKey } = generateConfigKeyPair();
+        const encrypted = encryptConfigData(publicKey, {
+            ENV_SECRET: 'from process env',
+            ENV_TOKEN: 'encrypted but not a secret key'
+        });
+
+        process.env.ENV_SECRET = encrypted.ENV_SECRET;
+        process.env.ENV_TOKEN = encrypted.ENV_TOKEN;
+        process.env.BAD_SECRET = '$$[not-base64]';
+
+        try {
+            const config = loadConfig({
+                file: `${__dirname}/fixtures/sample.env`,
+                key: privateKey
+            });
+
+            assert.strictEqual(config.ENV_SECRET, 'from process env');
+            assert.strictEqual(config.ENV_TOKEN, encrypted.ENV_TOKEN);
+            assert.strictEqual(config.BAD_SECRET, '$$[not-base64]');
+        } finally {
+            delete process.env.ENV_SECRET;
+            delete process.env.ENV_TOKEN;
+            delete process.env.BAD_SECRET;
+        }
+    });
+
     it('should load a config with no encryption', async () => {
         const config = loadConfig({
             file: `${__dirname}/fixtures/sample.env`
