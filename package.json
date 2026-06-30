@@ -1,6 +1,6 @@
 {
     "name": "@zyno-io/config",
-    "version": "1.13.0",
+    "version": "1.14.0",
     "description": "Runtime configuration encryption helpers",
     "license": "ISC",
     "author": "Zyno Consulting <hello@zyno.io>",

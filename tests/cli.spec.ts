@@ -3,12 +3,17 @@ import assert from 'node:assert';
 import { describe, it, beforeEach, after, mock } from 'node:test';
 
 import { generateConfigKeyPair } from '../src/helpers';
+import { encryptConfigData } from '../src/index';
 
 let importCounter = 0;
 async function getProgram() {
     const program = (await import(`../src/cli.program?t=${importCounter++}`)).program;
     program.exitOverride();
     return program;
+}
+
+function readFixture(path: string) {
+    return readFileSync(`${__dirname}/fixtures/${path}`, 'utf8').trimEnd();
 }
 
 describe('CLI', () => {
@@ -413,6 +418,48 @@ describe('CLI', () => {
                 delete process.env.CONFIG_PATH;
             }
         });
+
+        it('should decrypt inherited process.env _SECRET values without throwing on failures', async () => {
+            const program = await getProgram();
+            const exitCodes: number[] = [];
+            const exitMock = mock.method(process, 'exit', (code: number) => {
+                exitCodes.push(code);
+                throw new Error('process.exit');
+            });
+            const { privateKey, publicKey } = generateConfigKeyPair();
+            const encrypted = encryptConfigData(publicKey, {
+                CLI_PROCESS_SECRET: 'from process env',
+                CLI_PROCESS_TOKEN: 'encrypted but not a secret key'
+            });
+            const badSecret = '$$[not-base64]';
+            const script = `
+                if (process.env.CLI_PROCESS_SECRET !== ${JSON.stringify('from process env')}) process.exit(11);
+                if (process.env.CLI_PROCESS_TOKEN !== ${JSON.stringify(encrypted.CLI_PROCESS_TOKEN)}) process.exit(12);
+                if (process.env.CLI_PROCESS_BAD_SECRET !== ${JSON.stringify(badSecret)}) process.exit(13);
+                process.exit(0);
+            `;
+
+            process.env.CONFIG_PATH = `${__dirname}/fixtures`;
+            process.env.CLI_PROCESS_SECRET = encrypted.CLI_PROCESS_SECRET;
+            process.env.CLI_PROCESS_TOKEN = encrypted.CLI_PROCESS_TOKEN;
+            process.env.CLI_PROCESS_BAD_SECRET = badSecret;
+            writeFileSync(`${__dirname}/fixtures/.env`, '');
+
+            try {
+                assert.throws(() => program.parse(['exec', '-k', privateKey, '--', 'node', '-e', script], { from: 'user' }), {
+                    message: 'process.exit'
+                });
+
+                assert.strictEqual(exitCodes[0], 0, 'spawned process should receive the expected environment');
+            } finally {
+                exitMock.mock.restore();
+                rmSync(`${__dirname}/fixtures/.env`, { force: true });
+                delete process.env.CONFIG_PATH;
+                delete process.env.CLI_PROCESS_SECRET;
+                delete process.env.CLI_PROCESS_TOKEN;
+                delete process.env.CLI_PROCESS_BAD_SECRET;
+            }
+        });
     });
 
     describe('concat', () => {
@@ -452,6 +499,33 @@ describe('CLI', () => {
                 rmSync(f, { force: true });
             }
         });
+
+        const formatCases = [
+            { name: 'dotenv', args: [], extension: 'env' },
+            { name: 'json', args: ['--format', 'json'], extension: 'json' },
+            { name: 'yaml', args: ['--format', 'yaml'], extension: 'yaml' }
+        ];
+        const prefixCases = [
+            { name: 'without a prefix', args: [], fixture: 'concat.expected' },
+            { name: 'with a key prefix', args: ['--prefix', 'pre_'], fixture: 'concat.prefix-key.expected' },
+            { name: 'with a dotted nesting prefix', args: ['--prefix', 'top.'], fixture: 'concat.prefix-nested.expected' },
+            { name: 'with a dotted nesting and key prefix', args: ['--prefix', 'top.pre_'], fixture: 'concat.prefix-nested-key.expected' }
+        ];
+
+        for (const prefixCase of prefixCases) {
+            for (const formatCase of formatCases) {
+                it(`should output ${formatCase.name} ${prefixCase.name} from fixtures`, async () => {
+                    const program = await getProgram();
+                    const f = `${__dirname}/fixtures/concat.format.env`;
+
+                    const logMock = mock.method(console, 'log', () => {});
+                    program.parse(['concat', f, ...formatCase.args, ...prefixCase.args], { from: 'user' });
+
+                    const output = logMock.mock.calls.map(call => call.arguments[0]).join('\n');
+                    assert.strictEqual(output, readFixture(`${prefixCase.fixture}.${formatCase.extension}`));
+                });
+            }
+        }
 
         it('should exclude keys matching --exclude patterns', async () => {
             const program = await getProgram();
