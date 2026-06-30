@@ -338,7 +338,7 @@ function formatConfigData(data: ConfigData, format: ConcatOutputFormat, prefix =
     const formatted = applyConcatPrefix(data, format, prefix);
 
     if (format === 'json') {
-        return JSON.stringify(formatted, null, 2);
+        return JSON.stringify(formatted, null, 4);
     }
 
     if (format === 'yaml') {
@@ -385,7 +385,7 @@ function formatYamlData(data: FormattedConfigData, indent = 0): string {
         .map(([key, value]) => {
             const prefix = `${'  '.repeat(indent)}${formatYamlKey(key)}:`;
             if (typeof value === 'string') {
-                return `${prefix} ${JSON.stringify(value)}`;
+                return `${prefix} ${formatYamlString(value)}`;
             }
 
             return `${prefix}\n${formatYamlData(value, indent + 1)}`;
@@ -398,5 +398,9 @@ function formatYamlKey(key: string): string {
         return key;
     }
 
-    return JSON.stringify(key);
+    return formatYamlString(key);
+}
+
+function formatYamlString(value: string): string {
+    return `'${value.replace(/'/g, "''")}'`;
 }
